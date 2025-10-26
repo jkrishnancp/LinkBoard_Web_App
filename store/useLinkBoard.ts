@@ -16,6 +16,7 @@ interface LinkBoardStore extends AppState {
   deleteLink: (id: string) => void;
   duplicateLink: (id: string) => void;
   toggleLinkVisibility: (id: string) => void;
+  toggleLinkPreview: (id: string, enabled: boolean) => void;
 
   updateLayout: (layout: Layout[]) => void;
 
@@ -135,6 +136,14 @@ export const useLinkBoard = create<LinkBoardStore>((set, get) => ({
     set((state) => ({
       links: state.links.map((link) =>
         link.id === id ? { ...link, hidden: !link.hidden } : link
+      ),
+      updatedAt: new Date().toISOString(),
+    })),
+
+  toggleLinkPreview: (id: string, enabled: boolean) =>
+    set((state) => ({
+      links: state.links.map((link) =>
+        link.id === id ? { ...link, previewMode: enabled } : link
       ),
       updatedAt: new Date().toISOString(),
     })),

@@ -10,6 +10,8 @@ import { LinkCard } from '@/components/LinkCard';
 import { AddLinkModal } from '@/components/AddLinkModal';
 import { WidgetCard } from '@/components/widgets/WidgetCard';
 import { ResizeModal } from '@/components/ResizeModal';
+import { FloatingToolbar } from '@/components/FloatingToolbar';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 
@@ -21,6 +23,7 @@ export default function Home() {
     widgets,
     settings,
     isArrangeMode,
+    setArrangeMode,
     showWelcome,
     updateLayout,
     updateWidgetLayout,
@@ -28,6 +31,7 @@ export default function Home() {
     deleteLink,
     duplicateLink,
     toggleLinkVisibility,
+    toggleLinkPreview,
     removeWidget,
     dismissWelcome,
     hydrateFromStorage,
@@ -39,6 +43,11 @@ export default function Home() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingLink, setEditingLink] = useState<{ id: string; name: string; customName?: string; url: string; description?: string; color?: string } | undefined>();
   const [resizingItem, setResizingItem] = useState<{ id: string; type: 'link' | 'widget'; name: string; w: number; h: number } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'delete' | 'hide' | 'remove-widget';
+    id: string;
+    name: string;
+  } | null>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -135,6 +144,58 @@ export default function Home() {
     setResizingItem(null);
   };
 
+  const handleConfirmAction = () => {
+    if (!confirmAction) return;
+
+    switch (confirmAction.type) {
+      case 'delete':
+        deleteLink(confirmAction.id);
+        break;
+      case 'hide':
+        toggleLinkVisibility(confirmAction.id);
+        break;
+      case 'remove-widget':
+        removeWidget(confirmAction.id);
+        break;
+    }
+
+    setConfirmAction(null);
+  };
+
+  const handleDeleteClick = (link: typeof links[0]) => {
+    setConfirmAction({
+      type: 'delete',
+      id: link.id,
+      name: link.customName || link.name,
+    });
+  };
+
+  const handleHideClick = (link: typeof links[0]) => {
+    setConfirmAction({
+      type: 'hide',
+      id: link.id,
+      name: link.customName || link.name,
+    });
+  };
+
+  const handleRemoveWidgetClick = (widget: typeof widgets[0]) => {
+    const widgetNames: Record<string, string> = {
+      'local-ip': 'Local IP',
+      'public-ip': 'Public IP',
+      'datetime': 'Date & Time',
+      'uptime': 'Uptime',
+      'battery': 'Battery',
+      'network': 'Network',
+      'performance': 'Memory Usage',
+    };
+
+    setConfirmAction({
+      type: 'remove-widget',
+      id: widget.id,
+      name: widget.customName || widgetNames[widget.type] || widget.type,
+    });
+  };
+
   const visibleLinks = links.filter((link) => !link.hidden);
   const allItems = [...visibleLinks, ...widgets];
 
@@ -195,11 +256,13 @@ export default function Home() {
                   density={settings.density}
                   cardRadius={settings.cardRadius}
                   onEdit={() => handleEdit(link)}
-                  onDelete={() => deleteLink(link.id)}
+                  onDelete={() => handleDeleteClick(link)}
                   onDuplicate={() => duplicateLink(link.id)}
-                  onToggleVisibility={() => toggleLinkVisibility(link.id)}
+                  onToggleVisibility={() => handleHideClick(link)}
                   onResize={() => handleResizeLink(link)}
+                  onTogglePreview={toggleLinkPreview}
                   isArrangeMode={isArrangeMode}
+                  isPreviewMode={link.previewMode}
                 />
               </div>
             ))}
@@ -207,7 +270,7 @@ export default function Home() {
               <div key={widget.i} data-grid={{ x: widget.x, y: widget.y, w: widget.w, h: widget.h, i: widget.i }}>
                 <WidgetCard
                   type={widget.type}
-                  onRemove={() => removeWidget(widget.id)}
+                  onRemove={() => handleRemoveWidgetClick(widget)}
                   onResize={() => handleResizeWidget(widget)}
                   isArrangeMode={isArrangeMode}
                   cardRadius={settings.cardRadius}
@@ -218,13 +281,11 @@ export default function Home() {
         )}
       </main>
 
-      <button
-        onClick={() => setIsAddModalOpen(true)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center z-50"
-        title="Add Link"
-      >
-        <PlusIcon className="w-6 h-6" />
-      </button>
+      <FloatingToolbar
+        isArrangeMode={isArrangeMode}
+        onToggleArrange={() => setArrangeMode(!isArrangeMode)}
+        onAddLink={() => setIsAddModalOpen(true)}
+      />
 
       <AddLinkModal isOpen={isAddModalOpen} onClose={handleCloseModal} editLink={editingLink} />
 
@@ -237,6 +298,30 @@ export default function Home() {
           currentHeight={resizingItem.h}
           itemName={resizingItem.name}
           containerWidth={1200}
+        />
+      )}
+
+      {confirmAction && (
+        <ConfirmDialog
+          isOpen={true}
+          onClose={() => setConfirmAction(null)}
+          onConfirm={handleConfirmAction}
+          title={
+            confirmAction.type === 'delete'
+              ? 'Delete Link?'
+              : confirmAction.type === 'hide'
+              ? 'Hide Link?'
+              : 'Remove Widget?'
+          }
+          description={
+            confirmAction.type === 'delete'
+              ? `Are you sure you want to permanently delete "${confirmAction.name}"? This action cannot be undone.`
+              : confirmAction.type === 'hide'
+              ? `Are you sure you want to hide "${confirmAction.name}"? You can restore it later from the sidebar menu.`
+              : `Are you sure you want to remove the "${confirmAction.name}" widget from your dashboard?`
+          }
+          confirmText={confirmAction.type === 'delete' ? 'Delete Permanently' : confirmAction.type === 'hide' ? 'Hide Temporarily' : 'Remove Widget'}
+          confirmVariant={confirmAction.type === 'delete' ? 'destructive' : 'default'}
         />
       )}
     </div>

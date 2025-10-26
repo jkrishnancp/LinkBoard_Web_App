@@ -9,6 +9,7 @@ export const linkCardSchema = z.object({
   description: z.string().optional(),
   color: z.string().optional(),
   hidden: z.boolean().optional(),
+  previewMode: z.boolean().optional(),
   x: z.number(),
   y: z.number(),
   w: z.number(),
