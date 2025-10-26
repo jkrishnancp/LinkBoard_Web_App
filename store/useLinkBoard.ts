@@ -86,6 +86,7 @@ export const useLinkBoard = create<LinkBoardStore>((set, get) => ({
       y: maxY,
       w: cardSize,
       h: cardSize,
+      previewMode: true,
     };
 
     set({
@@ -265,8 +266,14 @@ export const useLinkBoard = create<LinkBoardStore>((set, get) => ({
 
   hydrateFromStorage: (state) => {
     if (state.links && state.links.length > 0) {
+      const linksWithPreview = state.links.map(link => ({
+        ...link,
+        previewMode: link.previewMode !== undefined ? link.previewMode : true,
+      }));
+
       set({
         ...state,
+        links: linksWithPreview,
         showWelcome: false,
       });
     }

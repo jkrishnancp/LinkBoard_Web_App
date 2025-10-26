@@ -20,6 +20,7 @@ interface LinkCardProps {
   onTogglePreview?: (linkId: string, enabled: boolean) => void;
   isArrangeMode: boolean;
   isPreviewMode?: boolean;
+  refreshKey?: number;
 }
 
 export function LinkCard({
@@ -34,6 +35,7 @@ export function LinkCard({
   onTogglePreview,
   isArrangeMode,
   isPreviewMode = false,
+  refreshKey = 0,
 }: LinkCardProps) {
   const radiusClasses = {
     sm: 'rounded-sm',
@@ -140,6 +142,7 @@ export function LinkCard({
             </div>
             <div className="flex-1 relative min-h-0 bg-white dark:bg-gray-900">
               <iframe
+                key={`${link.id}-${refreshKey}`}
                 src={link.url}
                 title={displayName}
                 className="absolute inset-0 w-full h-full border-0"

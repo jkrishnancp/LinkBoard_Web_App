@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Responsive, WidthProvider, Layout } from 'react-grid-layout';
 import { PlusIcon } from '@heroicons/react/24/solid';
 import { useLinkBoard } from '@/store/useLinkBoard';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import { Header } from '@/components/Header';
 import { LinkCard } from '@/components/LinkCard';
 import { AddLinkModal } from '@/components/AddLinkModal';
@@ -12,6 +13,7 @@ import { WidgetCard } from '@/components/widgets/WidgetCard';
 import { ResizeModal } from '@/components/ResizeModal';
 import { FloatingToolbar } from '@/components/FloatingToolbar';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { SettingsDrawer } from '@/components/SettingsDrawer';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 
@@ -41,6 +43,7 @@ export default function Home() {
 
   const [storageState, setStorageState] = useLocalStorage('linkboard-state', exportState(), 250);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [editingLink, setEditingLink] = useState<{ id: string; name: string; customName?: string; url: string; description?: string; color?: string } | undefined>();
   const [resizingItem, setResizingItem] = useState<{ id: string; type: 'link' | 'widget'; name: string; w: number; h: number } | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
@@ -49,6 +52,19 @@ export default function Home() {
     name: string;
   } | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const prevLinksLengthRef = useRef(links.length);
+
+  const handleRefreshPreviews = async () => {
+    console.log('[Auto-Refresh] Triggered at:', new Date().toISOString());
+    setRefreshKey((prev) => prev + 1);
+  };
+
+  const { triggerImmediateRefresh, lastRefresh } = useAutoRefresh({
+    onRefresh: handleRefreshPreviews,
+    enabled: true,
+    refreshInterval: 8 * 60 * 60 * 1000,
+  });
 
   useEffect(() => {
     setMounted(true);
@@ -64,6 +80,14 @@ export default function Home() {
     setStorageState(currentState);
     markSaved();
   }, [links, widgets, settings, mounted]);
+
+  useEffect(() => {
+    if (mounted && links.length > prevLinksLengthRef.current) {
+      console.log('[Auto-Refresh] New link added, triggering immediate refresh');
+      triggerImmediateRefresh();
+    }
+    prevLinksLengthRef.current = links.length;
+  }, [links.length, mounted, triggerImmediateRefresh]);
 
   const handleLayoutChange = (layout: Layout[]) => {
     if (isArrangeMode) {
@@ -263,6 +287,7 @@ export default function Home() {
                   onTogglePreview={toggleLinkPreview}
                   isArrangeMode={isArrangeMode}
                   isPreviewMode={link.previewMode}
+                  refreshKey={refreshKey}
                 />
               </div>
             ))}
@@ -285,6 +310,7 @@ export default function Home() {
         isArrangeMode={isArrangeMode}
         onToggleArrange={() => setArrangeMode(!isArrangeMode)}
         onAddLink={() => setIsAddModalOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       <AddLinkModal isOpen={isAddModalOpen} onClose={handleCloseModal} editLink={editingLink} />
@@ -324,6 +350,8 @@ export default function Home() {
           confirmVariant={confirmAction.type === 'delete' ? 'destructive' : 'default'}
         />
       )}
+
+      <SettingsDrawer isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   );
 }
