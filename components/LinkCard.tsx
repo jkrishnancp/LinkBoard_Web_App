@@ -87,32 +87,45 @@ export function LinkCard({
         link.hidden ? 'opacity-50' : ''
       } ${isArrangeMode ? 'cursor-move' : 'cursor-default'}`}
     >
-      <Toolbar
-        onEdit={onEdit}
-        onDelete={onDelete}
-        onDuplicate={onDuplicate}
-        onToggleVisibility={onToggleVisibility}
-        onResize={onResize}
-        isHidden={link.hidden || false}
-        showResize={isArrangeMode}
-      />
+      {!isPreviewMode && (
+        <Toolbar
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onDuplicate={onDuplicate}
+          onToggleVisibility={onToggleVisibility}
+          onResize={onResize}
+          isHidden={link.hidden || false}
+          showResize={isArrangeMode}
+        />
+      )}
 
       <div className="flex-1 flex flex-col min-h-0">
         {isPreviewMode ? (
           <div className="flex-1 flex flex-col min-h-0">
             <div className="mb-2 pb-2 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate flex-1">
                   {displayName}
                 </h3>
-                {onTogglePreview && (
-                  <LinkPreviewToggle
-                    linkId={link.id}
-                    url={link.url}
-                    isPreviewMode={isPreviewMode}
-                    onToggle={(enabled) => onTogglePreview(link.id, enabled)}
-                  />
-                )}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={onEdit}
+                    className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                    title="Edit Link"
+                  >
+                    <svg className="w-4 h-4 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+                  {onTogglePreview && (
+                    <LinkPreviewToggle
+                      linkId={link.id}
+                      url={link.url}
+                      isPreviewMode={isPreviewMode}
+                      onToggle={(enabled) => onTogglePreview(link.id, enabled)}
+                    />
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex-1 relative min-h-0 bg-white dark:bg-gray-900">

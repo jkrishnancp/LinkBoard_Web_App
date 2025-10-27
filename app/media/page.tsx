@@ -44,6 +44,8 @@ interface MediaStatus {
 
 export default function MediaDashboard() {
   const [data, setData] = useState<MediaStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isRotated, setIsRotated] = useState(false);
   const [serverConfig, setServerConfig] = useState({
@@ -74,6 +76,12 @@ export default function MediaDashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+          setError('Supabase configuration missing. Please check your .env file.');
+          setIsLoading(false);
+          return;
+        }
+
         const params = new URLSearchParams({
           ip: serverConfig.ip,
           qbport: serverConfig.qbport,
@@ -93,10 +101,18 @@ export default function MediaDashboard() {
         if (response.ok) {
           const json = await response.json();
           setData(json);
+          setError(null);
+          setIsLoading(false);
         } else {
-          console.error('API error:', response.status);
+          const errorText = await response.text();
+          setError(`API error (${response.status}): ${errorText}`);
+          setIsLoading(false);
+          console.error('API error:', response.status, errorText);
         }
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        setError(`Failed to fetch status: ${errorMessage}`);
+        setIsLoading(false);
         console.error('Failed to fetch status:', error);
       }
     };
@@ -119,10 +135,56 @@ export default function MediaDashboard() {
     year: 'numeric',
   });
 
-  if (!data) {
+  if (error) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center p-8">
+        <div className="max-w-2xl text-center">
+          <div className="text-red-500 text-2xl font-bold mb-4">Dashboard Error</div>
+          <div className="text-white text-lg mb-6">{error}</div>
+          <div className="space-y-4 text-left bg-gray-900 p-6 rounded-lg">
+            <div className="text-yellow-400 font-semibold">Troubleshooting Steps:</div>
+            <ol className="text-gray-300 space-y-2 list-decimal list-inside">
+              <li>Verify your server at {serverConfig.ip} is accessible</li>
+              <li>Check that services are running on the configured ports</li>
+              <li>Ensure Docker Remote API is enabled (port {serverConfig.dockerport})</li>
+              <li>Test endpoints manually or check browser console for details</li>
+            </ol>
+          </div>
+          <div className="mt-6 space-x-4">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Retry
+            </button>
+            <a
+              href="/media/settings"
+              className="inline-block px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600"
+            >
+              Configure Settings
+            </a>
+            <a
+              href="/"
+              className="inline-block px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600"
+            >
+              Back to LinkBoard
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading || !data) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-white text-xl">Loading...</div>
+        <div className="text-center">
+          <div className="text-white text-xl mb-4">Loading Media Dashboard...</div>
+          <div className="text-gray-500 text-sm">Connecting to {serverConfig.ip}</div>
+          <div className="mt-4">
+            <div className="inline-block w-8 h-8 border-4 border-gray-700 border-t-blue-500 rounded-full animate-spin"></div>
+          </div>
+        </div>
       </div>
     );
   }
