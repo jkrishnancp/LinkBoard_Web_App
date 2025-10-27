@@ -7,9 +7,6 @@ import { DockerWidget } from '@/components/media/DockerWidget';
 import { TorrentsWidget } from '@/components/media/TorrentsWidget';
 import { JellyfinWidget } from '@/components/media/JellyfinWidget';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
 interface MediaStatus {
   vpn: {
     healthy: boolean;
@@ -74,44 +71,96 @@ export default function MediaDashboard() {
   }, []);
 
   useEffect(() => {
+    const formatBytes = (bytes: number): string => {
+      if (bytes === 0) return '0 B/s';
+      const k = 1024;
+      const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+    };
+
+    const formatTime = (seconds: number): string => {
+      if (seconds === 0 || seconds === Infinity || seconds === 8640000) return '∞';
+      if (seconds < 60) return `${Math.round(seconds)}s`;
+      if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+      const hours = Math.floor(seconds / 3600);
+      const mins = Math.round((seconds % 3600) / 60);
+      return `${hours}h ${mins}m`;
+    };
+
     const fetchData = async () => {
       try {
-        if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-          setError('Supabase configuration missing. Please check your .env file.');
-          setIsLoading(false);
-          return;
-        }
+        const baseUrl = `http://${serverConfig.ip}`;
 
-        const params = new URLSearchParams({
-          ip: serverConfig.ip,
-          qbport: serverConfig.qbport,
-          dockerport: serverConfig.dockerport,
-          jellyfinport: serverConfig.jellyfinport,
-        });
+        const [vpnRes, qbitRes, qbitTorrentsRes, dockerRes, jellyfinRes] = await Promise.allSettled([
+          fetch('https://api.ipify.org?format=json'),
+          fetch(`${baseUrl}:${serverConfig.qbport}/api/v2/transfer/info`),
+          fetch(`${baseUrl}:${serverConfig.qbport}/api/v2/torrents/info`),
+          fetch(`${baseUrl}:${serverConfig.dockerport}/containers/json?all=true`),
+          fetch(`${baseUrl}:${serverConfig.jellyfinport}/Sessions`),
+        ]);
 
-        const apiUrl = `${SUPABASE_URL}/functions/v1/media-status?${params.toString()}`;
+        const vpnData = vpnRes.status === 'fulfilled' ? await vpnRes.value.json() : { ip: 'Unknown' };
+        const qbitData = qbitRes.status === 'fulfilled' ? await qbitRes.value.json() : null;
+        const qbitTorrentsData = qbitTorrentsRes.status === 'fulfilled' ? await qbitTorrentsRes.value.json() : [];
+        const dockerData = dockerRes.status === 'fulfilled' ? await dockerRes.value.json() : [];
+        const jellyfinData = jellyfinRes.status === 'fulfilled' ? await jellyfinRes.value.json() : [];
 
-        const response = await fetch(apiUrl, {
-          headers: {
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
+        const activeTorrents = (qbitTorrentsData || [])
+          .filter((t: any) => t.state === 'downloading' || t.state === 'uploading' || t.state === 'stalledDL')
+          .slice(0, 10)
+          .map((t: any) => ({
+            name: t.name,
+            progress: Math.round(t.progress * 100),
+            downloaded: formatBytes(t.downloaded),
+            size: formatBytes(t.size),
+            dl_speed: formatBytes(t.dlspeed),
+            eta: formatTime(t.eta),
+          }));
+
+        const containers = (dockerData || []).map((c: any) => ({
+          name: c.Names?.[0]?.replace('/', '') || c.Id?.substring(0, 12) || 'Unknown',
+          running: c.State === 'running',
+        }));
+
+        const sessions = (jellyfinData || [])
+          .filter((s: any) => s.NowPlayingItem)
+          .map((s: any) => {
+            const positionTicks = s.PlayState?.PositionTicks || 0;
+            const runtimeTicks = s.NowPlayingItem?.RunTimeTicks || 1;
+            const progress = (positionTicks / runtimeTicks) * 100;
+            const remainingSeconds = (runtimeTicks - positionTicks) / 10000000;
+
+            return {
+              user: s.UserName || 'Unknown',
+              title: s.NowPlayingItem?.Name || 'Unknown',
+              progress: Math.round(progress),
+              remaining: formatTime(remainingSeconds),
+            };
+          });
+
+        setData({
+          vpn: {
+            healthy: vpnRes.status === 'fulfilled',
+            ip: vpnData.ip || 'Unknown',
+          },
+          qbittorrent: {
+            download: qbitData ? formatBytes(qbitData.dl_info_speed || 0) : '0 B/s',
+            upload: qbitData ? formatBytes(qbitData.up_info_speed || 0) : '0 B/s',
+            active_count: activeTorrents.length,
+            torrents: activeTorrents,
+          },
+          containers: containers,
+          jellyfin: {
+            sessions: sessions,
           },
         });
 
-        if (response.ok) {
-          const json = await response.json();
-          setData(json);
-          setError(null);
-          setIsLoading(false);
-        } else {
-          const errorText = await response.text();
-          setError(`API error (${response.status}): ${errorText}`);
-          setIsLoading(false);
-          console.error('API error:', response.status, errorText);
-        }
+        setError(null);
+        setIsLoading(false);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        setError(`Failed to fetch status: ${errorMessage}`);
+        setError(`Failed to fetch status: ${errorMessage}. Make sure your browser can access http://${serverConfig.ip} (CORS must be enabled or use a proxy).`);
         setIsLoading(false);
         console.error('Failed to fetch status:', error);
       }
