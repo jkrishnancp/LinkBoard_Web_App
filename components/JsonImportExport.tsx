@@ -39,9 +39,12 @@ export function JsonImportExport() {
         const parsed = JSON.parse(content);
         const validated = appStateSchema.parse(parsed);
 
+        const totalLinks = validated.pages.reduce((sum, page) => sum + page.links.length, 0);
+        const pageCount = validated.pages.length;
+
         if (
           confirm(
-            `Import ${validated.links.length} links? This will replace your current board.`
+            `Import ${totalLinks} links across ${pageCount} page(s)? This will replace your current board.`
           )
         ) {
           importState(validated);

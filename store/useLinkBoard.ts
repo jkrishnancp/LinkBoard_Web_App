@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { LinkCard, BoardSettings, AppState } from '@/lib/validators';
+import { LinkCard, BoardSettings, AppState, Page, Category } from '@/lib/validators';
 import { getDefaultLayout, getFaviconUrl } from '@/lib/defaultPages';
 import { Layout } from 'react-grid-layout';
 import { SystemWidget, WidgetType } from '@/lib/systemInfo';
@@ -9,6 +9,17 @@ interface LinkBoardStore extends AppState {
   showWelcome: boolean;
   lastSaved: string | null;
   widgets: SystemWidget[];
+
+  setCurrentPage: (pageId: string) => void;
+  addPage: (name: string, icon?: string) => void;
+  updatePage: (pageId: string, updates: Partial<Page>) => void;
+  deletePage: (pageId: string) => void;
+  renamePage: (pageId: string, name: string) => void;
+
+  addCategory: (name: string, color?: string, icon?: string) => void;
+  updateCategory: (categoryId: string, updates: Partial<Category>) => void;
+  deleteCategory: (categoryId: string) => void;
+  toggleCategoryCollapse: (categoryId: string) => void;
 
   setLinks: (links: LinkCard[]) => void;
   addLink: (link: Omit<LinkCard, 'id' | 'i' | 'x' | 'y' | 'w' | 'h'>) => void;
@@ -35,6 +46,9 @@ interface LinkBoardStore extends AppState {
 
   markSaved: () => void;
   hydrateFromStorage: (state: Partial<AppState>) => void;
+
+  getCurrentPage: () => Page | undefined;
+  getCurrentLinks: () => LinkCard[];
 }
 
 const defaultSettings: BoardSettings = {
@@ -47,13 +61,26 @@ const defaultSettings: BoardSettings = {
   gridCols: 12,
 };
 
-const initialState: AppState = {
+const createDefaultPage = (): Page => ({
+  id: `page-${Date.now()}`,
+  name: 'Home',
+  icon: '🏠',
   links: [],
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+});
+
+const initialState: AppState = {
+  pages: [createDefaultPage()],
+  currentPageId: '',
+  categories: [],
   layoutVersion: 1,
   settings: defaultSettings,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
+
+initialState.currentPageId = initialState.pages[0].id;
 
 export const useLinkBoard = create<LinkBoardStore>((set, get) => ({
   ...initialState,
@@ -62,15 +89,139 @@ export const useLinkBoard = create<LinkBoardStore>((set, get) => ({
   lastSaved: null,
   widgets: [],
 
-  setLinks: (links) =>
-    set({
-      links,
+  getCurrentPage: () => {
+    const { pages, currentPageId } = get();
+    return pages.find((p) => p.id === currentPageId);
+  },
+
+  getCurrentLinks: () => {
+    const currentPage = get().getCurrentPage();
+    return currentPage?.links || [];
+  },
+
+  setCurrentPage: (pageId) => {
+    const { pages } = get();
+    const pageExists = pages.some((p) => p.id === pageId);
+    if (pageExists) {
+      set({
+        currentPageId: pageId,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  },
+
+  addPage: (name, icon) => {
+    const { pages } = get();
+    const newPage: Page = {
+      id: `page-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name,
+      icon: icon || '📄',
+      links: [],
+      createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    }),
+    };
+
+    set({
+      pages: [...pages, newPage],
+      currentPageId: newPage.id,
+      updatedAt: new Date().toISOString(),
+    });
+  },
+
+  updatePage: (pageId, updates) =>
+    set((state) => ({
+      pages: state.pages.map((page) =>
+        page.id === pageId
+          ? { ...page, ...updates, updatedAt: new Date().toISOString() }
+          : page
+      ),
+      updatedAt: new Date().toISOString(),
+    })),
+
+  deletePage: (pageId) => {
+    const { pages, currentPageId } = get();
+    if (pages.length <= 1) return;
+
+    const updatedPages = pages.filter((page) => page.id !== pageId);
+    const newCurrentPageId = currentPageId === pageId ? updatedPages[0].id : currentPageId;
+
+    set({
+      pages: updatedPages,
+      currentPageId: newCurrentPageId,
+      updatedAt: new Date().toISOString(),
+    });
+  },
+
+  renamePage: (pageId, name) =>
+    get().updatePage(pageId, { name }),
+
+  addCategory: (name, color, icon) => {
+    const { categories = [] } = get();
+    const newCategory: Category = {
+      id: `category-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name,
+      color: color || '#3B82F6',
+      icon: icon || '📁',
+      collapsed: false,
+    };
+
+    set({
+      categories: [...categories, newCategory],
+      updatedAt: new Date().toISOString(),
+    });
+  },
+
+  updateCategory: (categoryId, updates) =>
+    set((state) => ({
+      categories: (state.categories || []).map((cat) =>
+        cat.id === categoryId ? { ...cat, ...updates } : cat
+      ),
+      updatedAt: new Date().toISOString(),
+    })),
+
+  deleteCategory: (categoryId) => {
+    const { categories = [], pages } = get();
+    const updatedPages = pages.map((page) => ({
+      ...page,
+      links: page.links.map((link) =>
+        link.category === categoryId ? { ...link, category: undefined } : link
+      ),
+    }));
+
+    set({
+      categories: categories.filter((cat) => cat.id !== categoryId),
+      pages: updatedPages,
+      updatedAt: new Date().toISOString(),
+    });
+  },
+
+  toggleCategoryCollapse: (categoryId) =>
+    set((state) => ({
+      categories: (state.categories || []).map((cat) =>
+        cat.id === categoryId ? { ...cat, collapsed: !cat.collapsed } : cat
+      ),
+      updatedAt: new Date().toISOString(),
+    })),
+
+  setLinks: (links) => {
+    const { pages, currentPageId } = get();
+    set({
+      pages: pages.map((page) =>
+        page.id === currentPageId
+          ? { ...page, links, updatedAt: new Date().toISOString() }
+          : page
+      ),
+      updatedAt: new Date().toISOString(),
+    });
+  },
 
   addLink: (link) => {
-    const { links, settings } = get();
+    const { pages, currentPageId, settings } = get();
+    const currentPage = pages.find((p) => p.id === currentPageId);
+    if (!currentPage) return;
+
     const id = `link-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const links = currentPage.links;
 
     const maxY = links.length > 0 ? Math.max(...links.map((l) => l.y + l.h)) : 0;
     const cardSize = settings.density === 'compact' ? 2 : settings.density === 'comfy' ? 3 : 4;
@@ -86,37 +237,64 @@ export const useLinkBoard = create<LinkBoardStore>((set, get) => ({
       y: maxY,
       w: cardSize,
       h: cardSize,
-      previewMode: true,
+      previewMode: link.previewMode !== undefined ? link.previewMode : true,
+      refreshInterval: link.refreshInterval || 28800000,
     };
 
     set({
-      links: [...links, newLink],
+      pages: pages.map((page) =>
+        page.id === currentPageId
+          ? { ...page, links: [...page.links, newLink], updatedAt: new Date().toISOString() }
+          : page
+      ),
       updatedAt: new Date().toISOString(),
     });
   },
 
-  updateLink: (id, updates) =>
-    set((state) => ({
-      links: state.links.map((link) =>
-        link.id === id ? { ...link, ...updates } : link
+  updateLink: (id, updates) => {
+    const { pages, currentPageId } = get();
+    set({
+      pages: pages.map((page) =>
+        page.id === currentPageId
+          ? {
+              ...page,
+              links: page.links.map((link) =>
+                link.id === id ? { ...link, ...updates } : link
+              ),
+              updatedAt: new Date().toISOString(),
+            }
+          : page
       ),
       updatedAt: new Date().toISOString(),
-    })),
+    });
+  },
 
-  deleteLink: (id) =>
-    set((state) => ({
-      links: state.links.filter((link) => link.id !== id),
+  deleteLink: (id) => {
+    const { pages, currentPageId } = get();
+    set({
+      pages: pages.map((page) =>
+        page.id === currentPageId
+          ? {
+              ...page,
+              links: page.links.filter((link) => link.id !== id),
+              updatedAt: new Date().toISOString(),
+            }
+          : page
+      ),
       updatedAt: new Date().toISOString(),
-    })),
+    });
+  },
 
   duplicateLink: (id) => {
-    const { links } = get();
-    const linkToDuplicate = links.find((link) => link.id === id);
+    const { pages, currentPageId } = get();
+    const currentPage = pages.find((p) => p.id === currentPageId);
+    if (!currentPage) return;
 
+    const linkToDuplicate = currentPage.links.find((link) => link.id === id);
     if (!linkToDuplicate) return;
 
     const newId = `link-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const maxY = Math.max(...links.map((l) => l.y + l.h));
+    const maxY = Math.max(...currentPage.links.map((l) => l.y + l.h));
 
     const duplicatedLink: LinkCard = {
       ...linkToDuplicate,
@@ -128,30 +306,57 @@ export const useLinkBoard = create<LinkBoardStore>((set, get) => ({
     };
 
     set({
-      links: [...links, duplicatedLink],
+      pages: pages.map((page) =>
+        page.id === currentPageId
+          ? { ...page, links: [...page.links, duplicatedLink], updatedAt: new Date().toISOString() }
+          : page
+      ),
       updatedAt: new Date().toISOString(),
     });
   },
 
-  toggleLinkVisibility: (id) =>
-    set((state) => ({
-      links: state.links.map((link) =>
-        link.id === id ? { ...link, hidden: !link.hidden } : link
+  toggleLinkVisibility: (id) => {
+    const { pages, currentPageId } = get();
+    set({
+      pages: pages.map((page) =>
+        page.id === currentPageId
+          ? {
+              ...page,
+              links: page.links.map((link) =>
+                link.id === id ? { ...link, hidden: !link.hidden } : link
+              ),
+              updatedAt: new Date().toISOString(),
+            }
+          : page
       ),
       updatedAt: new Date().toISOString(),
-    })),
+    });
+  },
 
-  toggleLinkPreview: (id: string, enabled: boolean) =>
-    set((state) => ({
-      links: state.links.map((link) =>
-        link.id === id ? { ...link, previewMode: enabled } : link
+  toggleLinkPreview: (id: string, enabled: boolean) => {
+    const { pages, currentPageId } = get();
+    set({
+      pages: pages.map((page) =>
+        page.id === currentPageId
+          ? {
+              ...page,
+              links: page.links.map((link) =>
+                link.id === id ? { ...link, previewMode: enabled } : link
+              ),
+              updatedAt: new Date().toISOString(),
+            }
+          : page
       ),
       updatedAt: new Date().toISOString(),
-    })),
+    });
+  },
 
   updateLayout: (layout) => {
-    const { links } = get();
-    const updatedLinks = links.map((link) => {
+    const { pages, currentPageId } = get();
+    const currentPage = pages.find((p) => p.id === currentPageId);
+    if (!currentPage) return;
+
+    const updatedLinks = currentPage.links.map((link) => {
       const layoutItem = layout.find((l) => l.i === link.i);
       if (!layoutItem) return link;
 
@@ -165,7 +370,11 @@ export const useLinkBoard = create<LinkBoardStore>((set, get) => ({
     });
 
     set({
-      links: updatedLinks,
+      pages: pages.map((page) =>
+        page.id === currentPageId
+          ? { ...page, links: updatedLinks, updatedAt: new Date().toISOString() }
+          : page
+      ),
       updatedAt: new Date().toISOString(),
     });
   },
@@ -177,11 +386,17 @@ export const useLinkBoard = create<LinkBoardStore>((set, get) => ({
     })),
 
   setDefaultPages: () => {
-    const { settings } = get();
+    const { settings, pages, currentPageId } = get();
     const defaultLinks = getDefaultLayout(settings.density);
+    const currentPage = pages.find((p) => p.id === currentPageId);
+    if (!currentPage) return;
 
     set({
-      links: defaultLinks,
+      pages: pages.map((page) =>
+        page.id === currentPageId
+          ? { ...page, links: defaultLinks, updatedAt: new Date().toISOString() }
+          : page
+      ),
       updatedAt: new Date().toISOString(),
     });
   },
@@ -199,7 +414,9 @@ export const useLinkBoard = create<LinkBoardStore>((set, get) => ({
   exportState: () => {
     const state = get();
     return {
-      links: state.links,
+      pages: state.pages,
+      currentPageId: state.currentPageId,
+      categories: state.categories,
       layoutVersion: state.layoutVersion,
       settings: state.settings,
       createdAt: state.createdAt,
@@ -265,15 +482,44 @@ export const useLinkBoard = create<LinkBoardStore>((set, get) => ({
   },
 
   hydrateFromStorage: (state) => {
-    if (state.links && state.links.length > 0) {
-      const linksWithPreview = state.links.map(link => ({
-        ...link,
-        previewMode: link.previewMode !== undefined ? link.previewMode : true,
+    if (state.pages && state.pages.length > 0) {
+      const pagesWithPreview = state.pages.map((page) => ({
+        ...page,
+        links: page.links.map((link) => ({
+          ...link,
+          previewMode: link.previewMode !== undefined ? link.previewMode : true,
+          refreshInterval: link.refreshInterval || 28800000,
+        })),
       }));
 
       set({
         ...state,
-        links: linksWithPreview,
+        pages: pagesWithPreview,
+        showWelcome: false,
+      });
+    } else if ((state as any).links) {
+      const oldLinks = (state as any).links;
+      const defaultPage: Page = {
+        id: `page-${Date.now()}`,
+        name: 'Home',
+        icon: '🏠',
+        links: oldLinks.map((link: any) => ({
+          ...link,
+          previewMode: link.previewMode !== undefined ? link.previewMode : true,
+          refreshInterval: link.refreshInterval || 28800000,
+        })),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      set({
+        pages: [defaultPage],
+        currentPageId: defaultPage.id,
+        categories: state.categories || [],
+        settings: state.settings || defaultSettings,
+        layoutVersion: state.layoutVersion || 1,
+        createdAt: state.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         showWelcome: false,
       });
     }

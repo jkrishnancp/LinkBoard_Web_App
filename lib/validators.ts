@@ -10,6 +10,9 @@ export const linkCardSchema = z.object({
   color: z.string().optional(),
   hidden: z.boolean().optional(),
   previewMode: z.boolean().optional(),
+  refreshInterval: z.number().optional(),
+  category: z.string().optional(),
+  tags: z.array(z.string()).optional(),
   x: z.number(),
   y: z.number(),
   w: z.number(),
@@ -27,8 +30,27 @@ export const boardSettingsSchema = z.object({
   gridCols: z.number(),
 });
 
-export const appStateSchema = z.object({
+export const pageSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1, 'Page name is required'),
+  icon: z.string().optional(),
   links: z.array(linkCardSchema),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const categorySchema = z.object({
+  id: z.string(),
+  name: z.string().min(1, 'Category name is required'),
+  color: z.string().optional(),
+  icon: z.string().optional(),
+  collapsed: z.boolean().optional(),
+});
+
+export const appStateSchema = z.object({
+  pages: z.array(pageSchema),
+  currentPageId: z.string(),
+  categories: z.array(categorySchema).optional(),
   layoutVersion: z.number(),
   settings: boardSettingsSchema,
   createdAt: z.string(),
@@ -44,5 +66,7 @@ export const addLinkFormSchema = z.object({
 
 export type LinkCard = z.infer<typeof linkCardSchema>;
 export type BoardSettings = z.infer<typeof boardSettingsSchema>;
+export type Page = z.infer<typeof pageSchema>;
+export type Category = z.infer<typeof categorySchema>;
 export type AppState = z.infer<typeof appStateSchema>;
 export type AddLinkForm = z.infer<typeof addLinkFormSchema>;

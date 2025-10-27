@@ -21,7 +21,8 @@ const ResponsiveGridLayout = WidthProvider(Responsive);
 
 export default function Home() {
   const {
-    links,
+    getCurrentLinks,
+    getCurrentPage,
     widgets,
     settings,
     isArrangeMode,
@@ -39,7 +40,11 @@ export default function Home() {
     hydrateFromStorage,
     markSaved,
     exportState,
+    currentPageId,
+    pages,
   } = useLinkBoard();
+
+  const links = getCurrentLinks();
 
   const [storageState, setStorageState] = useLocalStorage('linkboard-state', exportState(), 250);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -79,7 +84,7 @@ export default function Home() {
     const currentState = exportState();
     setStorageState(currentState);
     markSaved();
-  }, [links, widgets, settings, mounted]);
+  }, [pages, widgets, settings, mounted, currentPageId, exportState, setStorageState, markSaved]);
 
   useEffect(() => {
     if (mounted && links.length > prevLinksLengthRef.current) {
