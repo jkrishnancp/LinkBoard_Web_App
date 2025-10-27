@@ -94,17 +94,71 @@ export default function MediaDashboard() {
 
         const [vpnRes, qbitRes, qbitTorrentsRes, dockerRes, jellyfinRes] = await Promise.allSettled([
           fetch('https://api.ipify.org?format=json'),
-          fetch(`${baseUrl}:${serverConfig.qbport}/api/v2/transfer/info`),
-          fetch(`${baseUrl}:${serverConfig.qbport}/api/v2/torrents/info`),
-          fetch(`${baseUrl}:${serverConfig.dockerport}/containers/json?all=true`),
-          fetch(`${baseUrl}:${serverConfig.jellyfinport}/Sessions`),
+          fetch(`${baseUrl}:${serverConfig.qbport}/api/v2/transfer/info`, { mode: 'cors' }),
+          fetch(`${baseUrl}:${serverConfig.qbport}/api/v2/torrents/info`, { mode: 'cors' }),
+          fetch(`${baseUrl}:${serverConfig.dockerport}/containers/json?all=true`, { mode: 'cors' }),
+          fetch(`${baseUrl}:${serverConfig.jellyfinport}/Sessions`, { mode: 'cors' }),
         ]);
 
+        // Log errors for debugging
+        if (qbitRes.status === 'rejected') {
+          console.error('qBittorrent transfer/info failed:', qbitRes.reason);
+        }
+        if (qbitTorrentsRes.status === 'rejected') {
+          console.error('qBittorrent torrents/info failed:', qbitTorrentsRes.reason);
+        }
+        if (dockerRes.status === 'rejected') {
+          console.error('Docker failed:', dockerRes.reason);
+        }
+        if (jellyfinRes.status === 'rejected') {
+          console.error('Jellyfin failed:', jellyfinRes.reason);
+        }
+
         const vpnData = vpnRes.status === 'fulfilled' ? await vpnRes.value.json() : { ip: 'Unknown' };
-        const qbitData = qbitRes.status === 'fulfilled' ? await qbitRes.value.json() : null;
-        const qbitTorrentsData = qbitTorrentsRes.status === 'fulfilled' ? await qbitTorrentsRes.value.json() : [];
-        const dockerData = dockerRes.status === 'fulfilled' ? await dockerRes.value.json() : [];
-        const jellyfinData = jellyfinRes.status === 'fulfilled' ? await jellyfinRes.value.json() : [];
+
+        let qbitData = null;
+        if (qbitRes.status === 'fulfilled' && qbitRes.value.ok) {
+          try {
+            qbitData = await qbitRes.value.json();
+          } catch (e) {
+            console.error('Failed to parse qBittorrent transfer data:', e);
+          }
+        } else if (qbitRes.status === 'fulfilled') {
+          console.error('qBittorrent returned status:', qbitRes.value.status, qbitRes.value.statusText);
+        }
+
+        let qbitTorrentsData: any[] = [];
+        if (qbitTorrentsRes.status === 'fulfilled' && qbitTorrentsRes.value.ok) {
+          try {
+            qbitTorrentsData = await qbitTorrentsRes.value.json();
+          } catch (e) {
+            console.error('Failed to parse qBittorrent torrents data:', e);
+          }
+        } else if (qbitTorrentsRes.status === 'fulfilled') {
+          console.error('qBittorrent torrents returned status:', qbitTorrentsRes.value.status, qbitTorrentsRes.value.statusText);
+        }
+
+        let dockerData: any[] = [];
+        if (dockerRes.status === 'fulfilled' && dockerRes.value.ok) {
+          try {
+            dockerData = await dockerRes.value.json();
+          } catch (e) {
+            console.error('Failed to parse Docker data:', e);
+          }
+        } else if (dockerRes.status === 'fulfilled') {
+          console.error('Docker returned status:', dockerRes.value.status, dockerRes.value.statusText);
+        }
+
+        let jellyfinData: any[] = [];
+        if (jellyfinRes.status === 'fulfilled' && jellyfinRes.value.ok) {
+          try {
+            jellyfinData = await jellyfinRes.value.json();
+          } catch (e) {
+            console.error('Failed to parse Jellyfin data:', e);
+          }
+        } else if (jellyfinRes.status === 'fulfilled') {
+          console.error('Jellyfin returned status:', jellyfinRes.value.status, jellyfinRes.value.statusText);
+        }
 
         const activeTorrents = (qbitTorrentsData || [])
           .filter((t: any) => t.state === 'downloading' || t.state === 'uploading' || t.state === 'stalledDL')
