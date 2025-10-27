@@ -23,6 +23,8 @@ import {
 import { useLinkBoard } from '@/store/useLinkBoard';
 import { SettingsDrawer } from './SettingsDrawer';
 import { SystemWidgetsModal } from './SystemWidgetsModal';
+import { BulkImport } from './BulkImport';
+import { CategoryManager } from './CategoryManager';
 import { WidgetType } from '@/lib/systemInfo';
 
 interface SidebarMenuProps {
@@ -130,6 +132,13 @@ export function SidebarMenu({ onImport, onExport }: SidebarMenuProps) {
               <ArrowUpTrayIcon className="w-5 h-5" />
               <span>Import Data</span>
             </Button>
+
+            <div className="border-t my-4"></div>
+
+            <div className="px-2 space-y-4">
+              <CategoryManager />
+              <BulkImport />
+            </div>
 
             <div className="border-t my-4"></div>
 

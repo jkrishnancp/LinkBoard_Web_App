@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { Responsive, WidthProvider, Layout } from 'react-grid-layout';
 import { PlusIcon } from '@heroicons/react/24/solid';
 import { useLinkBoard } from '@/store/useLinkBoard';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { Header } from '@/components/Header';
 import { LinkCard } from '@/components/LinkCard';
 import { AddLinkModal } from '@/components/AddLinkModal';
@@ -14,6 +15,9 @@ import { ResizeModal } from '@/components/ResizeModal';
 import { FloatingToolbar } from '@/components/FloatingToolbar';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { SettingsDrawer } from '@/components/SettingsDrawer';
+import { PageTabs } from '@/components/PageTabs';
+import { SearchBar, SearchFilters } from '@/components/SearchBar';
+import { KeyboardShortcutsHelp } from '@/components/KeyboardShortcutsHelp';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 
@@ -25,6 +29,7 @@ export default function Home() {
     getCurrentPage,
     widgets,
     settings,
+    categories,
     isArrangeMode,
     setArrangeMode,
     showWelcome,
@@ -42,6 +47,7 @@ export default function Home() {
     exportState,
     currentPageId,
     pages,
+    setCurrentPage,
   } = useLinkBoard();
 
   const links = getCurrentLinks();
@@ -49,8 +55,31 @@ export default function Home() {
   const [storageState, setStorageState] = useLocalStorage('linkboard-state', exportState(), 250);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [editingLink, setEditingLink] = useState<{ id: string; name: string; customName?: string; url: string; description?: string; color?: string } | undefined>();
-  const [resizingItem, setResizingItem] = useState<{ id: string; type: 'link' | 'widget'; name: string; w: number; h: number } | null>(null);
+  const [isShortcutsHelpOpen, setIsShortcutsHelpOpen] = useState(false);
+  const [searchFilters, setSearchFilters] = useState<SearchFilters>({
+    searchTerm: '',
+    categories: [],
+    tags: [],
+    showHidden: false,
+    previewOnly: false,
+  });
+  const [editingLink, setEditingLink] = useState<{
+    id: string;
+    name: string;
+    customName?: string;
+    url: string;
+    description?: string;
+    color?: string;
+    category?: string;
+    refreshInterval?: number;
+  } | undefined>();
+  const [resizingItem, setResizingItem] = useState<{
+    id: string;
+    type: 'link' | 'widget';
+    name: string;
+    w: number;
+    h: number;
+  } | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
     type: 'delete' | 'hide' | 'remove-widget';
     id: string;
@@ -59,6 +88,19 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const prevLinksLengthRef = useRef(links.length);
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then((registration) => {
+          console.log('Service Worker registered:', registration);
+        })
+        .catch((error) => {
+          console.error('Service Worker registration failed:', error);
+        });
+    }
+  }, []);
 
   const handleRefreshPreviews = async () => {
     console.log('[Auto-Refresh] Triggered at:', new Date().toISOString());
@@ -70,6 +112,65 @@ export default function Home() {
     enabled: true,
     refreshInterval: 8 * 60 * 60 * 1000,
   });
+
+  const keyboardShortcuts = useMemo(
+    () => [
+      {
+        key: 'n',
+        ctrl: true,
+        description: 'Add new link',
+        action: () => setIsAddModalOpen(true),
+      },
+      {
+        key: 'k',
+        ctrl: true,
+        description: 'Open search',
+        action: () => document.querySelector<HTMLInputElement>('input[type="text"]')?.focus(),
+      },
+      {
+        key: ',',
+        ctrl: true,
+        description: 'Open settings',
+        action: () => setIsSettingsOpen(true),
+      },
+      {
+        key: 'a',
+        ctrl: true,
+        shift: true,
+        description: 'Toggle arrange mode',
+        action: () => setArrangeMode(!isArrangeMode),
+      },
+      {
+        key: 'r',
+        ctrl: true,
+        description: 'Refresh all previews',
+        action: () => handleRefreshPreviews(),
+      },
+      {
+        key: '?',
+        description: 'Show keyboard shortcuts',
+        action: () => setIsShortcutsHelpOpen(true),
+      },
+      {
+        key: 'Escape',
+        description: 'Close dialogs',
+        action: () => {
+          setIsAddModalOpen(false);
+          setIsSettingsOpen(false);
+          setIsShortcutsHelpOpen(false);
+        },
+      },
+      ...pages.map((page, index) => ({
+        key: (index + 1).toString(),
+        ctrl: true,
+        description: `Switch to page: ${page.name}`,
+        action: () => setCurrentPage(page.id),
+      })),
+    ],
+    [isArrangeMode, setArrangeMode, pages, setCurrentPage]
+  );
+
+  useKeyboardShortcuts(keyboardShortcuts, !isAddModalOpen && !isSettingsOpen);
 
   useEffect(() => {
     setMounted(true);
@@ -96,8 +197,8 @@ export default function Home() {
 
   const handleLayoutChange = (layout: Layout[]) => {
     if (isArrangeMode) {
-      const linkLayouts = layout.filter(l => l.i.startsWith('link-'));
-      const widgetLayouts = layout.filter(l => l.i.startsWith('widget-'));
+      const linkLayouts = layout.filter((l) => l.i.startsWith('link-'));
+      const widgetLayouts = layout.filter((l) => l.i.startsWith('widget-'));
 
       updateLayout(linkLayouts);
       updateWidgetLayout(widgetLayouts);
@@ -112,6 +213,8 @@ export default function Home() {
       url: link.url,
       description: link.description,
       color: link.color,
+      category: link.category,
+      refreshInterval: link.refreshInterval,
     });
     setIsAddModalOpen(true);
   };
@@ -135,11 +238,11 @@ export default function Home() {
     const widgetNames: Record<string, string> = {
       'local-ip': 'Local IP',
       'public-ip': 'Public IP',
-      'datetime': 'Date & Time',
-      'uptime': 'Uptime',
-      'battery': 'Battery',
-      'network': 'Network',
-      'performance': 'Memory Usage',
+      datetime: 'Date & Time',
+      uptime: 'Uptime',
+      battery: 'Battery',
+      network: 'Network',
+      performance: 'Memory Usage',
     };
 
     setResizingItem({
@@ -157,15 +260,17 @@ export default function Home() {
     if (resizingItem.type === 'link') {
       updateLink(resizingItem.id, { w: width, h: height });
     } else {
-      const widget = widgets.find(w => w.id === resizingItem.id);
+      const widget = widgets.find((w) => w.id === resizingItem.id);
       if (widget) {
-        const updatedLayout = [{
-          i: widget.i,
-          x: widget.x,
-          y: widget.y,
-          w: width,
-          h: height,
-        }];
+        const updatedLayout = [
+          {
+            i: widget.i,
+            x: widget.x,
+            y: widget.y,
+            w: width,
+            h: height,
+          },
+        ];
         updateWidgetLayout(updatedLayout);
       }
     }
@@ -211,22 +316,68 @@ export default function Home() {
     const widgetNames: Record<string, string> = {
       'local-ip': 'Local IP',
       'public-ip': 'Public IP',
-      'datetime': 'Date & Time',
-      'uptime': 'Uptime',
-      'battery': 'Battery',
-      'network': 'Network',
-      'performance': 'Memory Usage',
+      datetime: 'Date & Time',
+      uptime: 'Uptime',
+      battery: 'Battery',
+      network: 'Network',
+      performance: 'Memory Usage',
     };
 
     setConfirmAction({
       type: 'remove-widget',
       id: widget.id,
-      name: widget.customName || widgetNames[widget.type] || widget.type,
+      name: widgetNames[widget.type] || widget.type,
     });
   };
 
-  const visibleLinks = links.filter((link) => !link.hidden);
-  const allItems = [...visibleLinks, ...widgets];
+  const filteredLinks = useMemo(() => {
+    let result = links;
+
+    if (!searchFilters.showHidden) {
+      result = result.filter((link) => !link.hidden);
+    }
+
+    if (searchFilters.searchTerm) {
+      const term = searchFilters.searchTerm.toLowerCase();
+      result = result.filter(
+        (link) =>
+          link.name.toLowerCase().includes(term) ||
+          link.url.toLowerCase().includes(term) ||
+          link.description?.toLowerCase().includes(term) ||
+          link.customName?.toLowerCase().includes(term)
+      );
+    }
+
+    if (searchFilters.categories.length > 0) {
+      result = result.filter((link) => link.category && searchFilters.categories.includes(link.category));
+    }
+
+    if (searchFilters.tags.length > 0) {
+      result = result.filter(
+        (link) => link.tags && link.tags.some((tag) => searchFilters.tags.includes(tag))
+      );
+    }
+
+    if (searchFilters.previewOnly) {
+      result = result.filter((link) => link.previewMode);
+    }
+
+    return result;
+  }, [links, searchFilters]);
+
+  const allItems = [...filteredLinks, ...widgets];
+
+  const availableCategories = useMemo(() => {
+    return categories?.map((cat) => cat.name) || [];
+  }, [categories]);
+
+  const availableTags = useMemo(() => {
+    const tags = new Set<string>();
+    links.forEach((link) => {
+      link.tags?.forEach((tag) => tags.add(tag));
+    });
+    return Array.from(tags);
+  }, [links]);
 
   const breakpoints = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 };
   const cols = { lg: 12, md: 12, sm: 6, xs: 4, xxs: 2 };
@@ -238,6 +389,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header />
+      <PageTabs />
 
       {showWelcome && links.length === 0 && widgets.length === 0 && (
         <div className="container mx-auto px-4 py-8">
@@ -246,24 +398,41 @@ export default function Home() {
               Welcome to LinkBoard!
             </h2>
             <p className="text-blue-800 dark:text-blue-200 mb-4">
-              Get started by adding your first link or widget. Use the + button for links, or the widgets icon in the header for system information.
+              Get started by adding your first link or widget. Use Ctrl+N to add a link, or press ? to see all keyboard shortcuts.
             </p>
-            <button
-              onClick={dismissWelcome}
-              className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
-            >
+            <button onClick={dismissWelcome} className="text-sm text-blue-600 dark:text-blue-400 hover:underline">
               Dismiss
             </button>
           </div>
         </div>
       )}
 
-      <main className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-4">
+        <div className="flex items-center justify-between mb-6">
+          <SearchBar
+            onSearch={setSearchFilters}
+            availableCategories={availableCategories}
+            availableTags={availableTags}
+          />
+        </div>
+      </div>
+
+      <main className="container mx-auto px-4 pb-8">
         {allItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
             <p className="text-gray-500 dark:text-gray-400 text-lg mb-4">
-              No items yet. Add links or widgets to get started.
+              {searchFilters.searchTerm
+                ? 'No links match your search'
+                : 'No items yet. Add links or widgets to get started.'}
             </p>
+            {searchFilters.searchTerm && (
+              <button
+                onClick={() => setSearchFilters({ ...searchFilters, searchTerm: '' })}
+                className="text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Clear search
+              </button>
+            )}
           </div>
         ) : (
           <ResponsiveGridLayout
@@ -278,7 +447,7 @@ export default function Home() {
             compactType="vertical"
             preventCollision={false}
           >
-            {visibleLinks.map((link) => (
+            {filteredLinks.map((link) => (
               <div key={link.i} data-grid={{ x: link.x, y: link.y, w: link.w, h: link.h, i: link.i }}>
                 <LinkCard
                   link={link}
@@ -351,12 +520,23 @@ export default function Home() {
               ? `Are you sure you want to hide "${confirmAction.name}"? You can restore it later from the sidebar menu.`
               : `Are you sure you want to remove the "${confirmAction.name}" widget from your dashboard?`
           }
-          confirmText={confirmAction.type === 'delete' ? 'Delete Permanently' : confirmAction.type === 'hide' ? 'Hide Temporarily' : 'Remove Widget'}
+          confirmText={
+            confirmAction.type === 'delete'
+              ? 'Delete Permanently'
+              : confirmAction.type === 'hide'
+              ? 'Hide Temporarily'
+              : 'Remove Widget'
+          }
           confirmVariant={confirmAction.type === 'delete' ? 'destructive' : 'default'}
         />
       )}
 
       <SettingsDrawer isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <KeyboardShortcutsHelp
+        shortcuts={keyboardShortcuts}
+        isOpen={isShortcutsHelpOpen}
+        onClose={() => setIsShortcutsHelpOpen(false)}
+      />
     </div>
   );
 }
