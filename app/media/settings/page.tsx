@@ -9,26 +9,26 @@ import { Card } from '@/components/ui/card';
 
 export default function MediaSettings() {
   const router = useRouter();
-  const [endpoints, setEndpoints] = useState({
-    vpn: '',
-    qbittorrent: '',
-    docker: '',
-    jellyfin: '',
+  const [config, setConfig] = useState({
+    ip: '10.6.3.70',
+    qbport: '8080',
+    dockerport: '2375',
+    jellyfinport: '8096',
   });
 
   useEffect(() => {
-    const saved = localStorage.getItem('media-endpoints');
+    const saved = localStorage.getItem('media-server-config');
     if (saved) {
       try {
-        setEndpoints(JSON.parse(saved));
+        setConfig(JSON.parse(saved));
       } catch (e) {
-        console.error('Failed to load endpoints', e);
+        console.error('Failed to load config', e);
       }
     }
   }, []);
 
   const handleSave = () => {
-    localStorage.setItem('media-endpoints', JSON.stringify(endpoints));
+    localStorage.setItem('media-server-config', JSON.stringify(config));
     alert('Settings saved!');
     router.push('/media');
   };
@@ -38,67 +38,67 @@ export default function MediaSettings() {
       <div className="max-w-2xl mx-auto">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-            Media Dashboard Settings
+            Media Server Configuration
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            Configure API endpoints for your media server services
+            Configure your media server connection details
           </p>
         </div>
 
         <Card className="p-6 space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="vpn">VPN Status API Endpoint</Label>
+            <Label htmlFor="ip">Server IP Address</Label>
             <Input
-              id="vpn"
-              type="url"
-              value={endpoints.vpn}
-              onChange={(e) => setEndpoints({ ...endpoints, vpn: e.target.value })}
-              placeholder="https://your-server.com/api/vpn-status"
+              id="ip"
+              type="text"
+              value={config.ip}
+              onChange={(e) => setConfig({ ...config, ip: e.target.value })}
+              placeholder="10.6.3.70"
             />
             <p className="text-xs text-gray-500">
-              Should return: {`{ "healthy": boolean, "ip": string }`}
+              IP address of your media server
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="qbittorrent">qBittorrent API Endpoint</Label>
+            <Label htmlFor="qbport">qBittorrent Port</Label>
             <Input
-              id="qbittorrent"
-              type="url"
-              value={endpoints.qbittorrent}
-              onChange={(e) => setEndpoints({ ...endpoints, qbittorrent: e.target.value })}
-              placeholder="https://your-server.com/api/qbittorrent"
+              id="qbport"
+              type="text"
+              value={config.qbport}
+              onChange={(e) => setConfig({ ...config, qbport: e.target.value })}
+              placeholder="8080"
             />
             <p className="text-xs text-gray-500">
-              Should return speeds, active count, and torrents array
+              Default: 8080 (Web UI port)
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="docker">Docker Containers API Endpoint</Label>
+            <Label htmlFor="dockerport">Docker API Port</Label>
             <Input
-              id="docker"
-              type="url"
-              value={endpoints.docker}
-              onChange={(e) => setEndpoints({ ...endpoints, docker: e.target.value })}
-              placeholder="https://your-server.com/api/docker"
+              id="dockerport"
+              type="text"
+              value={config.dockerport}
+              onChange={(e) => setConfig({ ...config, dockerport: e.target.value })}
+              placeholder="2375"
             />
             <p className="text-xs text-gray-500">
-              Should return: {`{ "containers": [{ "name": string, "running": boolean }] }`}
+              Default: 2375 (Docker Remote API port - must be enabled)
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="jellyfin">Jellyfin Sessions API Endpoint</Label>
+            <Label htmlFor="jellyfinport">Jellyfin Port</Label>
             <Input
-              id="jellyfin"
-              type="url"
-              value={endpoints.jellyfin}
-              onChange={(e) => setEndpoints({ ...endpoints, jellyfin: e.target.value })}
-              placeholder="https://your-server.com/api/jellyfin"
+              id="jellyfinport"
+              type="text"
+              value={config.jellyfinport}
+              onChange={(e) => setConfig({ ...config, jellyfinport: e.target.value })}
+              placeholder="8096"
             />
             <p className="text-xs text-gray-500">
-              Should return sessions array with user, title, progress, remaining
+              Default: 8096 (Jellyfin web port)
             </p>
           </div>
 
@@ -114,26 +114,17 @@ export default function MediaSettings() {
 
         <div className="mt-8 p-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
           <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
-            📖 API Requirements
+            Service Requirements
           </h3>
           <div className="text-sm text-blue-800 dark:text-blue-200 space-y-2">
             <p>
-              <strong>VPN API:</strong> Returns connection status and public IP
+              <strong>qBittorrent:</strong> Web UI at http://{config.ip}:{config.qbport}
             </p>
             <p>
-              <strong>qBittorrent API:</strong> Returns download/upload speeds and active
-              torrents
+              <strong>Docker:</strong> Remote API enabled on port {config.dockerport}
             </p>
             <p>
-              <strong>Docker API:</strong> Returns list of containers with their running
-              status
-            </p>
-            <p>
-              <strong>Jellyfin API:</strong> Returns active playback sessions
-            </p>
-            <p className="pt-2 border-t border-blue-300 dark:border-blue-700">
-              You need to create backend endpoints that fetch data from your services and
-              return it in the expected format. See documentation for examples.
+              <strong>Jellyfin:</strong> Accessible at http://{config.ip}:{config.jellyfinport}
             </p>
           </div>
         </div>
@@ -143,7 +134,7 @@ export default function MediaSettings() {
             href="/"
             className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
           >
-            ← Back to LinkBoard
+            Back to LinkBoard
           </a>
         </div>
       </div>

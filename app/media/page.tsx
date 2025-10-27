@@ -7,6 +7,9 @@ import { DockerWidget } from '@/components/media/DockerWidget';
 import { TorrentsWidget } from '@/components/media/TorrentsWidget';
 import { JellyfinWidget } from '@/components/media/JellyfinWidget';
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
 interface MediaStatus {
   vpn: {
     healthy: boolean;
@@ -43,20 +46,20 @@ export default function MediaDashboard() {
   const [data, setData] = useState<MediaStatus | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isRotated, setIsRotated] = useState(false);
-  const [endpoints, setEndpoints] = useState({
-    vpn: '',
-    qbittorrent: '',
-    docker: '',
-    jellyfin: '',
+  const [serverConfig, setServerConfig] = useState({
+    ip: '10.6.3.70',
+    qbport: '8080',
+    dockerport: '2375',
+    jellyfinport: '8096',
   });
 
   useEffect(() => {
-    const saved = localStorage.getItem('media-endpoints');
+    const saved = localStorage.getItem('media-server-config');
     if (saved) {
       try {
-        setEndpoints(JSON.parse(saved));
+        setServerConfig(JSON.parse(saved));
       } catch (e) {
-        console.error('Failed to load endpoints', e);
+        console.error('Failed to load config', e);
       }
     }
   }, []);
@@ -71,19 +74,28 @@ export default function MediaDashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const results = await Promise.all([
-          endpoints.vpn ? fetch(endpoints.vpn).then(r => r.json()).catch(() => ({ healthy: false, ip: 'Error' })) : Promise.resolve({ healthy: false, ip: 'Not configured' }),
-          endpoints.qbittorrent ? fetch(endpoints.qbittorrent).then(r => r.json()).catch(() => ({ download: '0 B/s', upload: '0 B/s', active_count: 0, torrents: [] })) : Promise.resolve({ download: '0 B/s', upload: '0 B/s', active_count: 0, torrents: [] }),
-          endpoints.docker ? fetch(endpoints.docker).then(r => r.json()).catch(() => ({ containers: [] })) : Promise.resolve({ containers: [] }),
-          endpoints.jellyfin ? fetch(endpoints.jellyfin).then(r => r.json()).catch(() => ({ sessions: [] })) : Promise.resolve({ sessions: [] }),
-        ]);
-
-        setData({
-          vpn: results[0],
-          qbittorrent: results[1],
-          containers: results[2].containers || [],
-          jellyfin: results[3],
+        const params = new URLSearchParams({
+          ip: serverConfig.ip,
+          qbport: serverConfig.qbport,
+          dockerport: serverConfig.dockerport,
+          jellyfinport: serverConfig.jellyfinport,
         });
+
+        const apiUrl = `${SUPABASE_URL}/functions/v1/media-status?${params.toString()}`;
+
+        const response = await fetch(apiUrl, {
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const json = await response.json();
+          setData(json);
+        } else {
+          console.error('API error:', response.status);
+        }
       } catch (error) {
         console.error('Failed to fetch status:', error);
       }
@@ -92,7 +104,7 @@ export default function MediaDashboard() {
     fetchData();
     const interval = setInterval(fetchData, 3000);
     return () => clearInterval(interval);
-  }, [endpoints]);
+  }, [serverConfig]);
 
   const timeString = currentTime.toLocaleTimeString('fr-FR', {
     hour: '2-digit',
@@ -180,23 +192,18 @@ export default function MediaDashboard() {
           {' • '}
           <button
             onClick={() => {
-              const newEndpoints = {
-                vpn: prompt('VPN API endpoint:', endpoints.vpn) || endpoints.vpn,
-                qbittorrent:
-                  prompt('qBittorrent API endpoint:', endpoints.qbittorrent) ||
-                  endpoints.qbittorrent,
-                docker:
-                  prompt('Docker API endpoint:', endpoints.docker) || endpoints.docker,
-                jellyfin:
-                  prompt('Jellyfin API endpoint:', endpoints.jellyfin) ||
-                  endpoints.jellyfin,
+              const newConfig = {
+                ip: prompt('Server IP:', serverConfig.ip) || serverConfig.ip,
+                qbport: prompt('qBittorrent Port:', serverConfig.qbport) || serverConfig.qbport,
+                dockerport: prompt('Docker Port:', serverConfig.dockerport) || serverConfig.dockerport,
+                jellyfinport: prompt('Jellyfin Port:', serverConfig.jellyfinport) || serverConfig.jellyfinport,
               };
-              setEndpoints(newEndpoints);
-              localStorage.setItem('media-endpoints', JSON.stringify(newEndpoints));
+              setServerConfig(newConfig);
+              localStorage.setItem('media-server-config', JSON.stringify(newConfig));
             }}
             className="underline hover:text-gray-300"
           >
-            Configure APIs
+            Configure Server
           </button>
         </footer>
       </div>
