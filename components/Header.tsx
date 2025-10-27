@@ -99,6 +99,12 @@ export function Header() {
             </div>
 
             <div className="flex items-center gap-2">
+              <a
+                href="/media"
+                className="px-3 py-1.5 text-sm font-medium rounded-md bg-gradient-to-r from-cyan-500 to-orange-500 text-white hover:from-cyan-600 hover:to-orange-600 transition-all"
+              >
+                Media Dashboard
+              </a>
               {lastSaved && (
                 <span className="hidden md:inline text-xs text-gray-500 dark:text-gray-400">
                   Last saved: {new Date(lastSaved).toLocaleTimeString()}
