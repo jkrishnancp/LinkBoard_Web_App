@@ -5,8 +5,6 @@ import { LinkCard as LinkCardType } from '@/lib/validators';
 import { Toolbar } from './Toolbar';
 import { LinkPreviewToggle } from './LinkPreviewToggle';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
-import { useLinkStatus } from '@/hooks/useLinkStatus';
-import { useLinkCache } from '@/hooks/useLinkCache';
 
 interface LinkCardProps {
   link: LinkCardType;
@@ -71,29 +69,13 @@ export function LinkCard({
     },
   };
 
-  const { status } = useLinkStatus(link.id, link.url, !link.hidden);
-  const { cache } = useLinkCache(link.id, link.url, !link.hidden);
-
   const displayName = link.customName || link.name;
-  const displayLogo = cache?.favicon || link.logo;
-  const displayDescription = cache?.description || link.description;
+  const displayLogo = link.logo;
+  const displayDescription = link.description;
 
   const handleOpen = () => {
     if (!isArrangeMode) {
       window.open(link.url, '_blank', 'noopener,noreferrer');
-    }
-  };
-
-  const getStatusColor = () => {
-    switch (status) {
-      case 'up':
-        return 'bg-green-500';
-      case 'down':
-        return 'bg-red-500';
-      case 'checking':
-        return 'bg-yellow-500';
-      default:
-        return 'bg-gray-500';
     }
   };
 
@@ -105,13 +87,6 @@ export function LinkCard({
         link.hidden ? 'opacity-50' : ''
       } ${isArrangeMode ? 'cursor-move' : 'cursor-default'}`}
     >
-      <div className="absolute top-2 left-2 z-10">
-        <div
-          className={`w-3 h-3 rounded-full ${getStatusColor()} ring-2 ring-white dark:ring-gray-800`}
-          title={`Status: ${status.toUpperCase()}`}
-        />
-      </div>
-
       <Toolbar
         onEdit={onEdit}
         onDelete={onDelete}
