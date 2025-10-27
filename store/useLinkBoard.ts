@@ -3,6 +3,7 @@ import { LinkCard, BoardSettings, AppState, Page, Category } from '@/lib/validat
 import { getDefaultLayout, getFaviconUrl } from '@/lib/defaultPages';
 import { Layout } from 'react-grid-layout';
 import { SystemWidget, WidgetType } from '@/lib/systemInfo';
+import { DashboardPersistence } from '@/lib/persistence';
 
 interface LinkBoardStore extends AppState {
   isArrangeMode: boolean;
@@ -46,10 +47,14 @@ interface LinkBoardStore extends AppState {
 
   markSaved: () => void;
   hydrateFromStorage: (state: Partial<AppState>) => void;
+  saveToDatabase: () => Promise<void>;
+  loadFromDatabase: () => Promise<void>;
 
   getCurrentPage: () => Page | undefined;
   getCurrentLinks: () => LinkCard[];
 }
+
+const dashboardDB = typeof window !== 'undefined' ? new DashboardPersistence() : null;
 
 const defaultSettings: BoardSettings = {
   title: 'My LinkBoard',
@@ -522,6 +527,33 @@ export const useLinkBoard = create<LinkBoardStore>((set, get) => ({
         updatedAt: new Date().toISOString(),
         showWelcome: false,
       });
+    }
+  },
+
+  saveToDatabase: async () => {
+    if (!dashboardDB) return;
+    const state = get().exportState();
+    await dashboardDB.save(state);
+  },
+
+  loadFromDatabase: async () => {
+    if (!dashboardDB) return;
+
+    const state = await dashboardDB.load();
+    if (state) {
+      get().hydrateFromStorage(state);
+      console.log('✓ Dashboard loaded from database');
+    } else {
+      console.log('No database state found, checking localStorage...');
+      // Try to migrate from localStorage
+      const migrated = await dashboardDB.migrateFromLocalStorage();
+      if (migrated) {
+        // Reload after migration
+        const newState = await dashboardDB.load();
+        if (newState) {
+          get().hydrateFromStorage(newState);
+        }
+      }
     }
   },
 }));

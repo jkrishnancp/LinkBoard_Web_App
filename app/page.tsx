@@ -48,11 +48,14 @@ export default function Home() {
     currentPageId,
     pages,
     setCurrentPage,
+    saveToDatabase,
+    loadFromDatabase,
   } = useLinkBoard();
 
   const links = getCurrentLinks();
 
   const [storageState, setStorageState] = useLocalStorage('linkboard-state', exportState(), 250);
+  const [dbSyncEnabled, setDbSyncEnabled] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isShortcutsHelpOpen, setIsShortcutsHelpOpen] = useState(false);
@@ -174,18 +177,46 @@ export default function Home() {
 
   useEffect(() => {
     setMounted(true);
-    if (storageState) {
-      hydrateFromStorage(storageState);
-    }
+
+    // Load from database first (primary source)
+    const initializeData = async () => {
+      console.log('[Dashboard] Initializing data...');
+
+      if (dbSyncEnabled) {
+        console.log('[Dashboard] Loading from database...');
+        await loadFromDatabase();
+      } else {
+        console.log('[Dashboard] Database sync disabled, using localStorage');
+        if (storageState) {
+          hydrateFromStorage(storageState);
+        }
+      }
+
+      console.log('[Dashboard] ✓ Initialization complete');
+    };
+
+    initializeData();
   }, []);
 
   useEffect(() => {
     if (!mounted) return;
 
     const currentState = exportState();
+
+    // Save to localStorage as backup
     setStorageState(currentState);
+
+    // Save to database (primary storage)
+    if (dbSyncEnabled) {
+      const saveDebounced = setTimeout(async () => {
+        await saveToDatabase();
+      }, 1000);
+
+      return () => clearTimeout(saveDebounced);
+    }
+
     markSaved();
-  }, [pages, widgets, settings, mounted, currentPageId, exportState, setStorageState, markSaved]);
+  }, [pages, widgets, settings, mounted, currentPageId, dbSyncEnabled]);
 
   useEffect(() => {
     if (mounted && links.length > prevLinksLengthRef.current) {

@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
+import { MediaConfigPersistence } from '@/lib/persistence';
+
+const mediaDB = new MediaConfigPersistence();
 
 export default function MediaSettings() {
   const router = useRouter();
@@ -17,20 +20,53 @@ export default function MediaSettings() {
   });
 
   useEffect(() => {
-    const saved = localStorage.getItem('media-server-config');
-    if (saved) {
-      try {
-        setConfig(JSON.parse(saved));
-      } catch (e) {
-        console.error('Failed to load config', e);
+    const loadConfig = async () => {
+      // Try database first
+      const dbConfig = await mediaDB.load();
+      if (dbConfig) {
+        setConfig({
+          ip: dbConfig.server_ip,
+          qbport: dbConfig.qbittorrent_port,
+          dockerport: dbConfig.docker_port,
+          jellyfinport: dbConfig.jellyfin_port,
+        });
+        return;
       }
-    }
+
+      // Fallback to localStorage
+      const saved = localStorage.getItem('media-server-config');
+      if (saved) {
+        try {
+          setConfig(JSON.parse(saved));
+          // Migrate to database
+          await mediaDB.migrateFromLocalStorage();
+        } catch (e) {
+          console.error('Failed to load config', e);
+        }
+      }
+    };
+
+    loadConfig();
   }, []);
 
-  const handleSave = () => {
-    localStorage.setItem('media-server-config', JSON.stringify(config));
-    alert('Settings saved!');
-    router.push('/media');
+  const handleSave = async () => {
+    // Save to database
+    const success = await mediaDB.save({
+      server_ip: config.ip,
+      qbittorrent_port: config.qbport,
+      docker_port: config.dockerport,
+      jellyfin_port: config.jellyfinport,
+      refresh_interval: 3,
+    });
+
+    if (success) {
+      // Also save to localStorage as backup
+      localStorage.setItem('media-server-config', JSON.stringify(config));
+      alert('Settings saved successfully!');
+      router.push('/media');
+    } else {
+      alert('Failed to save settings. Please try again.');
+    }
   };
 
   return (
